@@ -1,4 +1,10 @@
+use std::io;
+use std::io::{Read, Write};
+
 use lazy_static::lazy_static;
+
+pub mod buffer;
+mod command;
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ColorSupport {

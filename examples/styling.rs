@@ -31,7 +31,15 @@ fn main() -> std::io::Result<()> {
             to `Style`.
     */
 
-    // Color format supports hsl, hsv, cymk, rgb, and hex, system colors, and xterm colors
+    /*
+        Color:
+            Color format supports hsl, hsv, cymk, rgb, and hex, system colors, and xterm colors
+            There are equivalent shorthand helper methods on style::Color that correspond to the color
+            formats. The helper methods have validation and will return an Err response if the values
+            provided are not valid. The equivalent style:Color enum values can be used if you trust that
+            the data is in the correct ranges. Any value that is a float is a percentage and should be
+            a value from 0.0 to 1.0.
+     */
     let hsl = color!(hsl 217 69% 68%);
     let hsv = color!(hsv 217 49% 90%);
     let cymk = color!(0% 73% 78% 8%);
@@ -80,7 +88,7 @@ fn main() -> std::io::Result<()> {
             sequence. Hyperlinks have an opening sequence and a closing sequence and that is it.
             It is meant to surround the text that is the hyperlink.
      */
-    let link = Hyperlink("https://example.com");
+    let link = Hyperlink::from("https://example.com");
     println!("{link}This is a hyperlink{link:-}");
 
     /*
@@ -92,7 +100,7 @@ fn main() -> std::io::Result<()> {
         flags: BOLD | ITALIC | UNDERLINE | CROSSED | BLINK | REVERSED,
         fg: Some(color!(220, 100, 50)),
         bg: Some(color!(243)),
-        link: Some(Hyperlink("https://example.com")),
+        link: Some(Hyperlink::from("https://example.com")),
     };
     println!("{style}All Together (Style){style:-}");
 

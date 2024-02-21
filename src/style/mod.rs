@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::iter;
 
 pub use crate::_color as color;
@@ -17,31 +19,9 @@ pub trait AnsiSequence {
     }
 }
 
-pub struct Hyperlink<S>(pub S);
-
-impl Default for Hyperlink<&'static str> {
-    fn default() -> Self {
-        Hyperlink("")
-    }
-}
-
-impl<S: Debug> Debug for Hyperlink<S> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Hyperlink")
-            .field("link", &self.0)
-            .finish()
-    }
-}
-
-impl<S: Copy> Copy for Hyperlink<S> {}
-
-impl<S: Clone> Clone for Hyperlink<S> {
-    fn clone(&self) -> Self {
-        Hyperlink(self.0.clone())
-    }
-}
-
-impl<D: Display> Display for Hyperlink<D> {
+#[derive(Default, Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Hyperlink(pub String);
+impl Display for Hyperlink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if f.sign_minus() {
             write!(f, "{}", self.reset_sequence())
@@ -51,13 +31,19 @@ impl<D: Display> Display for Hyperlink<D> {
     }
 }
 
-impl<D> From<D> for Hyperlink<D> {
-    fn from(d: D) -> Self {
-        Hyperlink(d)
+impl From<&str> for Hyperlink {
+    fn from(d: &str) -> Self {
+        Hyperlink(d.to_string())
     }
 }
 
-impl<D: Display> AnsiSequence for Hyperlink<D> {
+impl From<String> for Hyperlink {
+    fn from(value: String) -> Self {
+        Hyperlink(value)
+    }
+}
+
+impl AnsiSequence for Hyperlink {
     fn ansi(&self) -> String {
         String::new()
     }
@@ -76,7 +62,7 @@ impl<D: Display> AnsiSequence for Hyperlink<D> {
 }
 
 /// System color representation.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SystemColor {
     BLACK,
     RED,
@@ -121,7 +107,7 @@ impl Display for SystemColor {
 /// Terminal color representation.
 ///
 /// Supports named system colors, XTerm/Ansi colors (0-255), and RGB colors (0-255,0-255,0-255).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
     System(SystemColor),
     /// 0<=value<=255
@@ -132,6 +118,36 @@ pub enum Color {
     HSL { h: u16, s: f32, l: f32 },
     HSV { h: u16, s: f32, v: f32 },
     CYMK { c: f32, y: f32, m: f32, k: f32 },
+}
+
+impl Hash for Color {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Color::System(c) => c.hash(state),
+            Color::Ansi(c) => c.hash(state),
+            Color::RGB { r, g, b } => {
+                r.hash(state);
+                g.hash(state);
+                b.hash(state);
+            }
+            Color::HSL { h, s, l } => {
+                h.hash(state);
+                s.to_bits().hash(state);
+                l.to_bits().hash(state);
+            }
+            Color::HSV { h, s, v } => {
+                h.hash(state);
+                s.to_bits().hash(state);
+                v.to_bits().hash(state);
+            }
+            Color::CYMK { c, y, m, k } => {
+                c.to_bits().hash(state);
+                y.to_bits().hash(state);
+                m.to_bits().hash(state);
+                k.to_bits().hash(state);
+            }
+        }
+    }
 }
 
 impl Display for Color {
@@ -341,49 +357,27 @@ impl Display for _Placeholder {
     }
 }
 
-pub struct Style<D = _Placeholder> {
+#[derive(PartialEq, Default, Hash, Clone, Debug)]
+pub struct Style {
     pub flags: StyleFlag,
     pub fg: Option<Color>,
     pub bg: Option<Color>,
-    pub link: Option<Hyperlink<D>>,
+    pub link: Option<Hyperlink>,
 }
 
-impl<D: Display + Debug> Debug for Style<D> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Style")
-            .field("flags", &self.flags)
-            .field("fg", &self.fg)
-            .field("bg", &self.bg)
-            .field("link", &self.link)
-            .finish()
+impl Style {
+    /// Get a hash value for the given style. The hash value is useful for a hash key for both
+    /// a map and a reference.
+    pub fn hash_key(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
     }
-}
 
-impl<D: Display + Copy> Copy for Style<D> {}
-
-impl<D: Display + Clone> Clone for Style<D> {
-    fn clone(&self) -> Self {
-        Style {
-            flags: self.flags,
-            fg: self.fg,
-            bg: self.bg,
-            link: self.link.clone(),
-        }
+    pub fn builder() -> Style {
+        Style::default()
     }
-}
 
-impl Style<&'static str> {
-    pub fn builder() -> Style<&'static str> {
-        Style {
-            flags: StyleFlag::default(),
-            fg: None,
-            bg: None,
-            link: None::<Hyperlink<&'static str>>,
-        }
-    }
-}
-
-impl<D: Display> Style<D> {
     pub fn fg(mut self, color: Color) -> Self {
         self.fg = Some(color);
         self
@@ -394,12 +388,12 @@ impl<D: Display> Style<D> {
         self
     }
 
-    pub fn link<L: Display>(self, link: L) -> Style<L> {
+    pub fn link<L: Display>(self, link: L) -> Style {
         Style {
             flags: self.flags,
             fg: self.fg,
             bg: self.bg,
-            link: Some(Hyperlink(link)),
+            link: Some(Hyperlink::from(link.to_string())),
         }
     }
 
@@ -444,7 +438,7 @@ impl<D: Display> Style<D> {
     }
 }
 
-impl<D: Display> Display for Style<D> {
+impl Display for Style {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if f.sign_minus() {
             write!(f, "{}", self.reset_sequence())
@@ -454,7 +448,7 @@ impl<D: Display> Display for Style<D> {
     }
 }
 
-impl<D: Display> AnsiSequence for Style<D> {
+impl AnsiSequence for Style {
     fn ansi(&self) -> String {
         let mut ansi = Vec::new();
 
@@ -507,6 +501,9 @@ impl<D: Display> AnsiSequence for Style<D> {
             }
             None => String::new()
         };
+        if link.len() == 0 && self.ansi().len() == 0 {
+            return String::new();
+        }
         format!("{}\x1b[{}m", link, self.ansi())
     }
 
@@ -517,6 +514,10 @@ impl<D: Display> AnsiSequence for Style<D> {
             }
             None => String::new()
         };
+
+        if link.len() == 0 && self.reset_ansi().len() == 0 {
+            return String::new();
+        }
         format!("\x1b[{}m{}", self.reset_ansi(), link)
     }
 }
