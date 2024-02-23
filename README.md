@@ -121,3 +121,8 @@ fn main() -> std::io::Result<()> {
 }
 
 ```
+
+## Ratatui Spotify player (Ratafy)
+
+- [ratatui-image](https://crates.io/crates/ratatui-image)
+- 

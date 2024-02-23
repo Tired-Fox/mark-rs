@@ -112,7 +112,6 @@ fn main() -> std::io::Result<()> {
         .fg(color!(yellow));
     println!("{style}All Together (Style): builder{style:-}");
 
-
     /*
         Capabilities:
             The library also provides terminal capabilities like whether it supports ansi sequences, and

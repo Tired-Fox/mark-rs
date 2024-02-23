@@ -1,0 +1,11 @@
+keys:
+  j: Decrement
+  k: Increment
+  J: NetworkRequestAndThenDecrement
+  K: NetworkRequestAndThenIncrement
+  q: Quit
+  esc: Quit
+  shift+a: Quit
+  ctrl+shift+alt+t: Increment
+  "shift++": Increment
+  "-": Decrement
