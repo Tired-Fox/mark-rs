@@ -61,9 +61,11 @@ impl AnsiSequence for Hyperlink {
     }
 }
 
-/// System color representation.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum SystemColor {
+/// Terminal color representation.
+///
+/// Supports named system colors, XTerm/Ansi colors (0-255), and RGB colors (0-255,0-255,0-255).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Color {
     BLACK,
     RED,
     GREEN,
@@ -72,44 +74,6 @@ pub enum SystemColor {
     MAGENTA,
     CYAN,
     WHITE,
-}
-
-impl AnsiSequence for SystemColor {
-    fn ansi(&self) -> String {
-        match self {
-            Self::BLACK => "0".to_string(),
-            Self::RED => "1".to_string(),
-            Self::GREEN => "2".to_string(),
-            Self::YELLOW => "3".to_string(),
-            Self::BLUE => "4".to_string(),
-            Self::MAGENTA => "5".to_string(),
-            Self::CYAN => "6".to_string(),
-            Self::WHITE => "7".to_string(),
-        }
-    }
-
-    fn reset_ansi(&self) -> String {
-        "9".to_string()
-    }
-}
-
-impl Display for SystemColor {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let prefix = if f.alternate() { "4" } else { "3" };
-        if f.sign_minus() {
-            write!(f, "\x1b[{prefix}{}m", self.reset_ansi())
-        } else {
-            write!(f, "\x1b[{prefix}{}m", self.ansi())
-        }
-    }
-}
-
-/// Terminal color representation.
-///
-/// Supports named system colors, XTerm/Ansi colors (0-255), and RGB colors (0-255,0-255,0-255).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Color {
-    System(SystemColor),
     /// 0<=value<=255
     Ansi(u8),
     /// 0<=R<=255, 0<=G<=255, 0<=B<=255
@@ -123,7 +87,14 @@ pub enum Color {
 impl Hash for Color {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Color::System(c) => c.hash(state),
+            Self::BLACK => "0".hash(state),
+            Self::RED => "1".hash(state),
+            Self::GREEN => "2".hash(state),
+            Self::YELLOW => "3".hash(state),
+            Self::BLUE => "4".hash(state),
+            Self::MAGENTA => "5".hash(state),
+            Self::CYAN => "6".hash(state),
+            Self::WHITE => "7".hash(state),
             Color::Ansi(c) => c.hash(state),
             Color::RGB { r, g, b } => {
                 r.hash(state);
@@ -187,7 +158,14 @@ impl From<&str> for Color {
 impl AnsiSequence for Color {
     fn ansi(&self) -> String {
         match self {
-            Color::System(sys) => sys.ansi(),
+            Self::BLACK => "0".to_string(),
+            Self::RED => "1".to_string(),
+            Self::GREEN => "2".to_string(),
+            Self::YELLOW => "3".to_string(),
+            Self::BLUE => "4".to_string(),
+            Self::MAGENTA => "5".to_string(),
+            Self::CYAN => "6".to_string(),
+            Self::WHITE => "7".to_string(),
             Color::Ansi(value) => format!("8;5;{}", value),
             Color::RGB { r, g, b } => format!("8;2;{};{};{}", r, g, b),
             Color::HSV { h, s, v } => {
@@ -200,9 +178,10 @@ impl AnsiSequence for Color {
                 format_hs_color(c, h, x, m)
             }
             Color::HSL { h, s, l } => {
+                // chroma
                 let c = (1.0 - ((2.0 * l) - 1.0).abs()) * s;
                 let h = *h as f32 / 60.0;
-                let x = c * (1.0 - ((h % 2.0) - 1.0));
+                let x = c * (1.0 - ((h % 2.0) - 1.0).abs());
                 let m = l - (c / 2.0);
 
                 format_hs_color(c, h, x, m)
@@ -223,21 +202,23 @@ impl AnsiSequence for Color {
 }
 
 fn format_hs_color(c: f32, h: f32, x: f32, m: f32) -> String {
-    let (r, g, b) = if h > 0.0 && h < 1.0 { (c, x, 0.0) }
-    else if h >= 1.0 && h <= 2.0 { (x, c, 0.0) }
-    else if h >= 2.0 && h <= 3.0 { (0.0, c, x) }
-    else if h >= 3.0 && h <= 4.0 { (0.0, x, c) }
-    else if h >= 4.0 && h <= 5.0 { (x, 0.0, c) }
-    else if h >= 5.0 && h <= 6.0 { (c, 0.0, x) }
-    else {
-        panic!("Hue in hsl is greater than or equal to 360 which is out of bounds")
+    let (r, g, b) = match h {
+        0.0..=1.0 => (c, x, 0.0),
+        1.0..=2.0 => (x, c, 0.0),
+        2.0..=3.0 => (0.0, c, x),
+        3.0..=4.0 => (0.0, x, c),
+        4.0..=5.0 => (x, 0.0, c),
+        5.0..=6.0 => (c, 0.0, x),
+        _ => {
+            panic!("Hue in hsl is greater than or equal to 360 which is out of bounds")
+        }
     };
 
     format!(
         "8;2;{};{};{}",
-        ((r + m) * 255.0).round() as u8,
-        ((g + m) * 255.0).round() as u8,
-        ((b + m) * 255.0).round() as u8
+        ((r + m) * 255.0) as u8,
+        ((g + m) * 255.0) as u8,
+        ((b + m) * 255.0) as u8
     )
 }
 
@@ -344,7 +325,7 @@ macro_rules! _color {
             $crate::style::Color::from(stringify!($($hex)*))
         };
         ($color: ident) => {
-            paste::paste!($crate::style::Color::System($crate::style::SystemColor::[<$color:upper>]))
+            paste::paste!($crate::style::Color::[<$color:upper>])
         };
     }
 
